@@ -290,21 +290,30 @@ export default class BetterFootnotes extends Plugin {
 				}
 			}
 
-			// Collect all existing footnote definitions
+			// Collect all existing footnote definitions with improved regex
 			const existingFootnotes: Array<{
 				line: number;
 				number: number;
 				text: string;
+				originalLabel: string;
 			}> = [];
 			if (footnoteStartLine !== -1) {
 				for (let i = footnoteStartLine; i < lines.length; i++) {
 					const line = lines[i];
-					const match = line.match(/^\s*\[\^(\d+)\]:\s*(.*)$/);
+					// More flexible regex that captures any footnote label
+					const match = line.match(/^\s*\[\^([^\]]+)\]:\s*(.*)$/);
 					if (match) {
+						const label = match[1];
+						const text = match[2];
+						// Try to parse as number, fallback to a high number for non-numeric
+						const num = parseInt(label);
+						const sortNumber = isNaN(num) ? 9999 + i : num; // Non-numeric get high numbers
+
 						existingFootnotes.push({
 							line: i,
-							number: parseInt(match[1]),
-							text: match[2],
+							number: sortNumber,
+							text: text,
+							originalLabel: label,
 						});
 					}
 				}
@@ -315,10 +324,25 @@ export default class BetterFootnotes extends Plugin {
 				line: -1, // New footnote
 				number: footnoteNumber,
 				text: footnoteText,
+				originalLabel: footnoteNumber.toString(),
 			});
 
-			// Sort footnotes by number
-			existingFootnotes.sort((a, b) => a.number - b.number);
+			// Sort footnotes by number (numeric first, then non-numeric by line order)
+			existingFootnotes.sort((a, b) => {
+				if (a.number < 9999 && b.number < 9999) {
+					// Both numeric, sort by number
+					return a.number - b.number;
+				} else if (a.number < 9999) {
+					// a is numeric, b is not - a comes first
+					return -1;
+				} else if (b.number < 9999) {
+					// b is numeric, a is not - b comes first
+					return 1;
+				} else {
+					// Both non-numeric, sort by original line order
+					return a.line - b.line;
+				}
+			});
 
 			// Determine insertion point and spacing
 			let insertLine: number;
@@ -364,9 +388,9 @@ export default class BetterFootnotes extends Plugin {
 				}
 			}
 
-			// Build the footnote section
+			// Build the footnote section using original labels for now (renumbering will fix them)
 			const footnoteLines = existingFootnotes.map(
-				(fn) => `[^${fn.number}]: ${fn.text}`
+				(fn) => `[^${fn.originalLabel}]: ${fn.text}`
 			);
 			const footnoteSection = spacingPrefix + footnoteLines.join("\n");
 
@@ -382,7 +406,8 @@ export default class BetterFootnotes extends Plugin {
 				editor.replaceRange(footnoteSection, insertPos);
 			}
 
-			// Renumber all footnotes to ensure sequential ordering
+			// Now renumber all footnotes to ensure sequential ordering
+			// This will fix the labels to be 1, 2, 3, etc. based on appearance order
 			await this.renumberFootnotes(editor);
 
 			console.log(

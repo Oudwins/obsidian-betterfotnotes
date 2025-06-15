@@ -88,11 +88,12 @@ describe("renumberFootnotes", () => {
 
 			const result = renumberFootnotes(content);
 
+			// Footnotes should be renumbered AND sorted by appearance order: xyz=1, note=2, abc=3
 			const expected = `This text has[^1] some content[^2] and more[^3] footnotes.
 
+[^1]: First footnote content
 [^2]: Second footnote content
-[^3]: Third footnote content  
-[^1]: First footnote content`;
+[^3]: Third footnote content  `;
 
 			expect(result.content).toBe(expected);
 			expect(result.changed).toBe(true);
@@ -107,10 +108,11 @@ describe("renumberFootnotes", () => {
 
 			const result = renumberFootnotes(content);
 
+			// Footnotes sorted by appearance order: xyz=1, note=2
 			const expected = `This text has[^1] some content[^2] and more[^1] references.
 
-[^2]: Second footnote content
-[^1]: First footnote content (referenced twice)`;
+[^1]: First footnote content (referenced twice)
+[^2]: Second footnote content`;
 
 			expect(result.content).toBe(expected);
 			expect(result.changed).toBe(true);
@@ -188,6 +190,7 @@ describe("renumberFootnotes", () => {
 				"Text[^a] with\r\nfootnote[^b].\r\n\r\n[^a]: First\r\n[^b]: Second";
 			const result = renumberFootnotes(content);
 
+			// Should preserve \r\n line endings and sort footnotes by appearance order: a=1, b=2
 			const expected =
 				"Text[^1] with\r\nfootnote[^2].\r\n\r\n[^1]: First\r\n[^2]: Second";
 
