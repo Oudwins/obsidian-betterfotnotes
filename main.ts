@@ -382,11 +382,7 @@ class FootnoteInputModal extends Modal {
 					.setButtonText("Add")
 					.setCta()
 					.onClick(() => {
-						const footnoteText = this.inputEl.value.trim();
-						if (footnoteText) {
-							this.onSubmit(footnoteText);
-							this.close();
-						}
+						this.submitFootnote();
 					})
 			)
 			.addButton((btn) =>
@@ -395,10 +391,29 @@ class FootnoteInputModal extends Modal {
 				})
 			);
 
+		// Add keyboard event listeners
+		this.inputEl.addEventListener("keydown", (event) => {
+			if (event.key === "Enter") {
+				event.preventDefault();
+				this.submitFootnote();
+			} else if (event.key === "Escape") {
+				event.preventDefault();
+				this.close();
+			}
+		});
+
 		// Focus the input field and select all text
 		setTimeout(() => {
 			this.inputEl.focus();
 		}, 100);
+	}
+
+	private submitFootnote() {
+		const footnoteText = this.inputEl.value.trim();
+		if (footnoteText) {
+			this.onSubmit(footnoteText);
+			this.close();
+		}
 	}
 
 	onClose() {
