@@ -215,22 +215,49 @@ export default class BetterFootnotes extends Plugin {
 			// Find the next footnote number
 			const nextFootnoteNumber = this.getNextFootnoteNumber(content);
 
-			// Insert footnote reference at cursor position
-			const footnoteRef = `[^${nextFootnoteNumber}]`;
-			editor.replaceRange(footnoteRef, cursor);
-
-			// Show modal for footnote text input
+			// Show modal for footnote text input first
 			new FootnoteInputModal(this.app, (footnoteText: string) => {
-				this.addFootnoteDefinition(
+				// Only insert footnote reference and definition after user confirms
+				this.insertFootnoteReferenceAndDefinition(
 					editor,
+					cursor,
 					nextFootnoteNumber,
 					footnoteText
 				);
 			}).open();
 
-			console.log(`Inserted footnote reference ${nextFootnoteNumber}`);
+			console.log(`Preparing to insert footnote ${nextFootnoteNumber}`);
 		} catch (error) {
 			console.error("Failed to insert custom footnote:", error);
+		}
+	}
+
+	async insertFootnoteReferenceAndDefinition(
+		editor: Editor,
+		cursor: any,
+		footnoteNumber: number,
+		footnoteText: string
+	) {
+		try {
+			// Insert footnote reference at the original cursor position
+			const footnoteRef = `[^${footnoteNumber}]`;
+			editor.replaceRange(footnoteRef, cursor);
+
+			// Add footnote definition at the bottom
+			await this.addFootnoteDefinition(
+				editor,
+				footnoteNumber,
+				footnoteText
+			);
+
+			console.log(
+				`Inserted footnote reference and definition ${footnoteNumber}: ${footnoteText}`
+			);
+		} catch (error) {
+			console.error(
+				"Failed to insert footnote reference and definition:",
+				error
+			);
 		}
 	}
 
