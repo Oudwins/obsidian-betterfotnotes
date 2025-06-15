@@ -1,4 +1,4 @@
-import { Plugin, Editor, MarkdownView } from "obsidian";
+import { Plugin, Editor, MarkdownView, Modal, Setting } from "obsidian";
 import { renumberFootnotes } from "./src/footnote-utils";
 
 interface BetterFootnotesSettings {
@@ -219,6 +219,29 @@ export default class BetterFootnotes extends Plugin {
 			const footnoteRef = `[^${nextFootnoteNumber}]`;
 			editor.replaceRange(footnoteRef, cursor);
 
+			// Show modal for footnote text input
+			new FootnoteInputModal(this.app, (footnoteText: string) => {
+				this.addFootnoteDefinition(
+					editor,
+					nextFootnoteNumber,
+					footnoteText
+				);
+			}).open();
+
+			console.log(`Inserted footnote reference ${nextFootnoteNumber}`);
+		} catch (error) {
+			console.error("Failed to insert custom footnote:", error);
+		}
+	}
+
+	async addFootnoteDefinition(
+		editor: Editor,
+		footnoteNumber: number,
+		footnoteText: string
+	) {
+		try {
+			const content = editor.getValue();
+
 			// Find the end of the document to add footnote definition
 			const lines = content.split("\n");
 			let insertLine = lines.length;
@@ -245,7 +268,7 @@ export default class BetterFootnotes extends Plugin {
 			}
 
 			// Add footnote definition
-			const footnoteDefinition = `[^${nextFootnoteNumber}]: `;
+			const footnoteDefinition = `[^${footnoteNumber}]: ${footnoteText}`;
 
 			// Position cursor at the end of document or before existing footnotes
 			const insertPosition = { line: insertLine, ch: 0 };
@@ -261,27 +284,14 @@ export default class BetterFootnotes extends Plugin {
 
 			editor.replaceRange(textToInsert, insertPosition);
 
-			// Position cursor after the footnote definition colon
-			const newCursor = {
-				line:
-					insertLine +
-					(textToInsert.startsWith("\n")
-						? textToInsert.startsWith("\n\n")
-							? 2
-							: 1
-						: 0),
-				ch: footnoteDefinition.length,
-			};
-			editor.setCursor(newCursor);
-
 			// Renumber all footnotes to ensure sequential ordering
 			await this.renumberFootnotes(editor);
 
 			console.log(
-				`Inserted footnote ${nextFootnoteNumber} and renumbered all footnotes`
+				`Added footnote definition ${footnoteNumber}: ${footnoteText}`
 			);
 		} catch (error) {
-			console.error("Failed to insert custom footnote:", error);
+			console.error("Failed to add footnote definition:", error);
 		}
 	}
 
@@ -341,6 +351,59 @@ export default class BetterFootnotes extends Plugin {
 		});
 
 		console.log("Replaced default footnote command with enhanced version");
+	}
+}
+
+class FootnoteInputModal extends Modal {
+	private onSubmit: (text: string) => void;
+	private inputEl: HTMLInputElement;
+
+	constructor(app: any, onSubmit: (text: string) => void) {
+		super(app);
+		this.onSubmit = onSubmit;
+	}
+
+	onOpen() {
+		const { contentEl } = this;
+		contentEl.empty();
+
+		contentEl.createEl("h2", { text: "Add footnote" });
+
+		new Setting(contentEl).setName("Footnote text").addText((text) => {
+			this.inputEl = text.inputEl;
+			text.setPlaceholder("Enter footnote text...").onChange((value) => {
+				// Optional: could add real-time validation here
+			});
+		});
+
+		new Setting(contentEl)
+			.addButton((btn) =>
+				btn
+					.setButtonText("Add")
+					.setCta()
+					.onClick(() => {
+						const footnoteText = this.inputEl.value.trim();
+						if (footnoteText) {
+							this.onSubmit(footnoteText);
+							this.close();
+						}
+					})
+			)
+			.addButton((btn) =>
+				btn.setButtonText("Cancel").onClick(() => {
+					this.close();
+				})
+			);
+
+		// Focus the input field and select all text
+		setTimeout(() => {
+			this.inputEl.focus();
+		}, 100);
+	}
+
+	onClose() {
+		const { contentEl } = this;
+		contentEl.empty();
 	}
 }
 
