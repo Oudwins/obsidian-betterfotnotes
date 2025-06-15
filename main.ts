@@ -1,4 +1,5 @@
 import { Plugin, Editor, MarkdownView } from "obsidian";
+import { renumberFootnotes } from "./src/footnote-utils";
 
 interface BetterFootnotesSettings {
 	mySetting: string;
@@ -216,73 +217,12 @@ export default class BetterFootnotes extends Plugin {
 	async renumberFootnotes(editor: Editor) {
 		try {
 			const content = editor.getValue();
+			const result = renumberFootnotes(content);
 
-			// Find all footnote references in order of appearance (ignoring original names)
-			const footnoteRefRegex = /\[\^([^\]]+)\]/g;
-			const seenLabels = new Set<string>();
-			const orderedLabels: string[] = [];
-			let match;
-
-			// Collect unique footnote labels in the exact order they first appear in the text
-			while ((match = footnoteRefRegex.exec(content)) !== null) {
-				const originalLabel = match[1];
-				if (!seenLabels.has(originalLabel)) {
-					seenLabels.add(originalLabel);
-					orderedLabels.push(originalLabel);
-				}
-			}
-
-			if (orderedLabels.length === 0) {
-				return; // No footnotes to renumber
-			}
-
-			// Create mapping: original label -> sequential number (1, 2, 3...)
-			// This completely ignores what the original name was
-			const labelToSequentialNumber: { [originalLabel: string]: string } =
-				{};
-			orderedLabels.forEach((originalLabel, index) => {
-				labelToSequentialNumber[originalLabel] = (index + 1).toString();
-			});
-
-			let updatedContent = content;
-
-			// Replace all occurrences while preserving reference-definition linking
-			for (const [originalLabel, newNumber] of Object.entries(
-				labelToSequentialNumber
-			)) {
-				// Escape special regex characters in the original label
-				const escapedOriginalLabel = originalLabel.replace(
-					/[.*+?^${}()|[\]\\]/g,
-					"\\$&"
-				);
-
-				// Replace all footnote references [^originalLabel] -> [^newNumber]
-				const refRegex = new RegExp(
-					`\\[\\^${escapedOriginalLabel}\\]`,
-					"g"
-				);
-				updatedContent = updatedContent.replace(
-					refRegex,
-					`[^${newNumber}]`
-				);
-
-				// Replace footnote definitions [^originalLabel]: -> [^newNumber]:
-				// This preserves the link between reference and its content
-				const defRegex = new RegExp(
-					`^(\\s*\\[\\^${escapedOriginalLabel}\\]:)`,
-					"gm"
-				);
-				updatedContent = updatedContent.replace(
-					defRegex,
-					`[^${newNumber}]:`
-				);
-			}
-
-			// Update the editor content
-			if (updatedContent !== content) {
-				editor.setValue(updatedContent);
+			if (result.changed) {
+				editor.setValue(result.content);
 				console.log(
-					`Renumbered ${orderedLabels.length} footnotes sequentially (1-${orderedLabels.length}) based on order of appearance`
+					`Renumbered ${result.footnoteCount} footnotes sequentially (1-${result.footnoteCount}) based on order of appearance`
 				);
 			}
 		} catch (error) {
