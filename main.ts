@@ -14,6 +14,16 @@ export default class BetterFootnotes extends Plugin {
 	async onload() {
 		await this.loadSettings();
 
+		// Clean up old backups on startup
+		await this.cleanupOldBackups();
+
+		// Set up periodic cleanup every 24 hours
+		this.registerInterval(
+			window.setInterval(async () => {
+				await this.cleanupOldBackups();
+			}, 24 * 60 * 60 * 1000) // 24 hours in milliseconds
+		);
+
 		// Monkey patch the editor:insert-footnote command to listen for execution
 		const originalCommand = (this.app as any).commands.commands[
 			"editor:insert-footnote"
@@ -25,7 +35,7 @@ export default class BetterFootnotes extends Plugin {
 					editor: Editor,
 					view: MarkdownView
 				) => {
-					console.log("Footnote command triggered! 2");
+					console.log("Footnote command triggered!");
 
 					// Create backup of current file
 					await this.createBackup(view);
@@ -150,6 +160,46 @@ export default class BetterFootnotes extends Plugin {
 			console.log(`Backup created: ${backupPath}`);
 		} catch (error) {
 			console.error("Failed to create backup:", error);
+		}
+	}
+
+	async cleanupOldBackups() {
+		try {
+			const backupFolder = `${this.manifest.dir}/backups`;
+
+			// Check if backup folder exists
+			if (!(await this.app.vault.adapter.exists(backupFolder))) {
+				return; // No backups folder, nothing to clean
+			}
+
+			const files = await this.app.vault.adapter.list(backupFolder);
+			const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+
+			// files.files contains the file names
+			for (const fileName of files.files) {
+				try {
+					const filePath = `${backupFolder}/${fileName}`;
+					const fileStats = await this.app.vault.adapter.stat(
+						filePath
+					);
+
+					if (
+						fileStats &&
+						fileStats.type === "file" &&
+						fileStats.ctime < thirtyDaysAgo
+					) {
+						await this.app.vault.adapter.remove(filePath);
+						console.log(`Deleted old backup: ${fileName}`);
+					}
+				} catch (fileError) {
+					console.error(
+						`Error processing backup file ${fileName}:`,
+						fileError
+					);
+				}
+			}
+		} catch (error) {
+			console.error("Failed to clean up old backups:", error);
 		}
 	}
 }
