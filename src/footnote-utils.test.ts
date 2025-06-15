@@ -166,9 +166,9 @@ describe("renumberFootnotes", () => {
 		});
 
 		it("should handle complex regex-special characters in footnote labels", () => {
-			const content = `Test[^note.*+?^()|[]\\] with special chars.
+			const content = `Test[^note.*+?^$\\{\\}()|\\] with special chars.
 
-[^note.*+?^()|[]\\]: Content with special label`;
+[^note.*+?^$\\{\\}()|\\]: Content with special label`;
 
 			const result = renumberFootnotes(content);
 

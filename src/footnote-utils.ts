@@ -24,11 +24,16 @@ export function renumberFootnotes(content: string): FootnoteRenumberResult {
 		};
 	}
 
-	// Find all footnote references in order of appearance (ignoring original names)
-	const footnoteRefRegex = /\[\^([^\]]+)\]/g;
+	// Step 1: Find all footnote references in order of appearance (ignoring original names)
+	// Only look for references [^label], NOT definitions [^label]:
+	// Handle escaped brackets properly: match everything until unescaped ]
+	const footnoteRefRegex = /\[\^((?:[^\]\\]|\\.)+)\](?!:)/g;
 	const seenLabels = new Set<string>();
 	const orderedLabels: string[] = [];
 	let match;
+
+	// Reset regex lastIndex to scan from beginning
+	footnoteRefRegex.lastIndex = 0;
 
 	// Collect unique footnote labels in the exact order they first appear in the text
 	while ((match = footnoteRefRegex.exec(content)) !== null) {
@@ -47,36 +52,76 @@ export function renumberFootnotes(content: string): FootnoteRenumberResult {
 		};
 	}
 
-	// Create mapping: original label -> sequential number (1, 2, 3...)
+	// Step 2: Create mapping: original label -> sequential number (1, 2, 3...)
 	// This completely ignores what the original name was
 	const labelToSequentialNumber: { [originalLabel: string]: string } = {};
 	orderedLabels.forEach((originalLabel, index) => {
 		labelToSequentialNumber[originalLabel] = (index + 1).toString();
 	});
 
+	// Step 3: Replace all occurrences using a different approach to avoid conflicts
+	// We'll use temporary placeholders first, then replace with final numbers
 	let updatedContent = content;
+	const tempPlaceholders: { [originalLabel: string]: string } = {};
 
-	// Replace all occurrences while preserving reference-definition linking
+	// First pass: Replace with temporary unique placeholders
 	for (const [originalLabel, newNumber] of Object.entries(
 		labelToSequentialNumber
 	)) {
+		// Create a unique temporary placeholder that won't conflict
+		const tempPlaceholder = `__TEMP_FOOTNOTE_${Math.random()
+			.toString(36)
+			.substr(2, 9)}__`;
+		tempPlaceholders[tempPlaceholder] = newNumber;
+
 		// Escape special regex characters in the original label
 		const escapedOriginalLabel = originalLabel.replace(
 			/[.*+?^${}()|[\]\\]/g,
 			"\\$&"
 		);
 
-		// Replace all footnote references [^originalLabel] -> [^newNumber]
-		const refRegex = new RegExp(`\\[\\^${escapedOriginalLabel}\\]`, "g");
-		updatedContent = updatedContent.replace(refRegex, `[^${newNumber}]`);
+		// Replace all footnote references [^originalLabel] -> [^tempPlaceholder]
+		const refRegex = new RegExp(
+			`\\[\\^${escapedOriginalLabel}\\](?!:)`,
+			"g"
+		);
+		updatedContent = updatedContent.replace(
+			refRegex,
+			`[^${tempPlaceholder}]`
+		);
 
-		// Replace footnote definitions [^originalLabel]: -> [^newNumber]:
-		// This preserves the link between reference and its content
+		// Replace footnote definitions [^originalLabel]: -> [^tempPlaceholder]:
+		// Preserve the original indentation/whitespace
 		const defRegex = new RegExp(
-			`^(\\s*\\[\\^${escapedOriginalLabel}\\]:)`,
+			`^(\\s*)(\\[\\^${escapedOriginalLabel}\\]:)`,
 			"gm"
 		);
-		updatedContent = updatedContent.replace(defRegex, `[^${newNumber}]:`);
+		updatedContent = updatedContent.replace(
+			defRegex,
+			`$1[^${tempPlaceholder}]:`
+		);
+	}
+
+	// Second pass: Replace temporary placeholders with final numbers
+	for (const [tempPlaceholder, newNumber] of Object.entries(
+		tempPlaceholders
+	)) {
+		const escapedPlaceholder = tempPlaceholder.replace(
+			/[.*+?^${}()|[\]\\]/g,
+			"\\$&"
+		);
+
+		// Replace references
+		const refRegex = new RegExp(`\\[\\^${escapedPlaceholder}\\](?!:)`, "g");
+		updatedContent = updatedContent.replace(refRegex, `[^${newNumber}]`);
+
+		// Replace definitions
+		// Preserve the original indentation/whitespace
+		const defRegex = new RegExp(
+			`^(\\s*)(\\[\\^${escapedPlaceholder}\\]:)`,
+			"gm"
+		);
+		updatedContent = updatedContent.replace(defRegex, `$1[^${newNumber}]:`);
 	}
 
 	return {
