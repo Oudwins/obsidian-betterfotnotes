@@ -25,36 +25,10 @@ export default class BetterFootnotes extends Plugin {
 			}, 24 * 60 * 60 * 1000) // 24 hours in milliseconds
 		);
 
-		// Monkey patch the editor:insert-footnote command to listen for execution
-		const originalCommand = (this.app as any).commands.commands[
-			"editor:insert-footnote"
-		];
-		if (originalCommand) {
-			const originalEditorCallback = originalCommand.editorCallback;
-			if (originalEditorCallback) {
-				originalCommand.editorCallback = async (
-					editor: Editor,
-					view: MarkdownView
-				) => {
-					console.log("Footnote command triggered!");
-
-					// Create backup of current file
-					await this.createBackup(view);
-
-					// Execute the original footnote command first
-					const result = originalEditorCallback.call(
-						this,
-						editor,
-						view
-					);
-
-					// Then renumber all footnotes
-					await this.renumberFootnotes(editor);
-
-					return result;
-				};
-			}
-		}
+		// Wait for app to be ready, then replace the default footnote command
+		this.app.workspace.onLayoutReady(() => {
+			this.replaceFootnoteCommand();
+		});
 
 		// This creates an icon in the left ribbon.
 		// const ribbonIconEl = this.addRibbonIcon(
@@ -228,6 +202,145 @@ export default class BetterFootnotes extends Plugin {
 		} catch (error) {
 			console.error("Failed to renumber footnotes:", error);
 		}
+	}
+
+	async insertCustomFootnote(editor: Editor, view: MarkdownView) {
+		try {
+			// Create backup of current file
+			await this.createBackup(view);
+
+			const content = editor.getValue();
+			const cursor = editor.getCursor();
+
+			// Find the next footnote number
+			const nextFootnoteNumber = this.getNextFootnoteNumber(content);
+
+			// Insert footnote reference at cursor position
+			const footnoteRef = `[^${nextFootnoteNumber}]`;
+			editor.replaceRange(footnoteRef, cursor);
+
+			// Find the end of the document to add footnote definition
+			const lines = content.split("\n");
+			let insertLine = lines.length;
+
+			// Check if there are already footnote definitions at the end
+			// If so, add before them, otherwise add at the very end
+			let hasFootnoteSection = false;
+			for (let i = lines.length - 1; i >= 0; i--) {
+				const line = lines[i].trim();
+				if (line === "") continue; // Skip empty lines
+
+				if (line.match(/^\[\^[^\]]+\]:/)) {
+					// Found a footnote definition
+					hasFootnoteSection = true;
+					continue;
+				} else {
+					// Found non-footnote content
+					if (hasFootnoteSection) {
+						// Insert before the footnote section
+						insertLine = i + 1;
+					}
+					break;
+				}
+			}
+
+			// Add footnote definition
+			const footnoteDefinition = `[^${nextFootnoteNumber}]: `;
+
+			// Position cursor at the end of document or before existing footnotes
+			const insertPosition = { line: insertLine, ch: 0 };
+
+			// Add some spacing if needed
+			let textToInsert = footnoteDefinition;
+			if (insertLine < lines.length && lines[insertLine].trim() !== "") {
+				textToInsert = "\n" + textToInsert;
+			}
+			if (insertLine === lines.length) {
+				textToInsert = "\n\n" + textToInsert;
+			}
+
+			editor.replaceRange(textToInsert, insertPosition);
+
+			// Position cursor after the footnote definition colon
+			const newCursor = {
+				line:
+					insertLine +
+					(textToInsert.startsWith("\n")
+						? textToInsert.startsWith("\n\n")
+							? 2
+							: 1
+						: 0),
+				ch: footnoteDefinition.length,
+			};
+			editor.setCursor(newCursor);
+
+			// Renumber all footnotes to ensure sequential ordering
+			await this.renumberFootnotes(editor);
+
+			console.log(
+				`Inserted footnote ${nextFootnoteNumber} and renumbered all footnotes`
+			);
+		} catch (error) {
+			console.error("Failed to insert custom footnote:", error);
+		}
+	}
+
+	getNextFootnoteNumber(content: string): number {
+		// Find all existing footnote references and definitions
+		const footnoteRefs = content.match(/\[\^([^\]]+)\]/g) || [];
+		const footnoteDefs = content.match(/^\[\^([^\]]+)\]:/gm) || [];
+
+		// Combine all footnote labels
+		const allFootnotes = new Set();
+
+		footnoteRefs.forEach((ref) => {
+			const match = ref.match(/\[\^([^\]]+)\]/);
+			if (match) allFootnotes.add(match[1]);
+		});
+
+		footnoteDefs.forEach((def) => {
+			const match = def.match(/\[\^([^\]]+)\]:/);
+			if (match) allFootnotes.add(match[1]);
+		});
+
+		// Find the highest number used
+		let maxNumber = 0;
+		allFootnotes.forEach((label: string) => {
+			const num = parseInt(label);
+			if (!isNaN(num) && num > maxNumber) {
+				maxNumber = num;
+			}
+		});
+
+		return maxNumber + 1;
+	}
+
+	replaceFootnoteCommand() {
+		// Get reference to the commands object
+		const commands = (this.app as any).commands;
+
+		// Remove the existing footnote command
+		if (commands.commands["editor:insert-footnote"]) {
+			delete commands.commands["editor:insert-footnote"];
+		}
+
+		// Add our replacement command with the same ID
+		commands.addCommand({
+			id: "editor:insert-footnote",
+			name: "Insert footnote",
+			editorCallback: async (editor: Editor, view: MarkdownView) => {
+				console.log("Replaced Footnote command triggered!");
+				await this.insertCustomFootnote(editor, view);
+			},
+			hotkeys: [
+				{
+					modifiers: ["Mod"],
+					key: "^",
+				},
+			],
+		});
+
+		console.log("Replaced default footnote command with enhanced version");
 	}
 }
 
