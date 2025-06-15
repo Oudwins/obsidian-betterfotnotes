@@ -21,12 +21,15 @@ export default class BetterFootnotes extends Plugin {
 		if (originalCommand) {
 			const originalEditorCallback = originalCommand.editorCallback;
 			if (originalEditorCallback) {
-				originalCommand.editorCallback = (
+				originalCommand.editorCallback = async (
 					editor: Editor,
 					view: MarkdownView
 				) => {
-					console.log(editor.getValue());
-					console.log("Footnote command triggered!");
+					console.log("Footnote command triggered! 2");
+
+					// Create backup of current file
+					await this.createBackup(view);
+
 					return originalEditorCallback.call(this, editor, view);
 				};
 			}
@@ -113,6 +116,41 @@ export default class BetterFootnotes extends Plugin {
 
 	async saveSettings() {
 		await this.saveData(this.settings);
+	}
+
+	async createBackup(view: MarkdownView) {
+		try {
+			const activeFile = view.file;
+			if (!activeFile) {
+				console.error("No active file found");
+				return;
+			}
+
+			// Read the current file content
+			const content = await this.app.vault.read(activeFile);
+
+			// Create timestamp for backup filename
+			const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+			const originalName = activeFile.basename;
+			const extension = activeFile.extension;
+			const backupFileName = `${originalName}_backup_${timestamp}.${extension}`;
+
+			// Ensure the backups folder exists
+			const backupFolder = `${this.manifest.dir}/backups`;
+			try {
+				await this.app.vault.adapter.mkdir(backupFolder);
+			} catch (error) {
+				// Folder might already exist, that's fine
+			}
+
+			// Save the backup file
+			const backupPath = `${backupFolder}/${backupFileName}`;
+			await this.app.vault.adapter.write(backupPath, content);
+
+			console.log(`Backup created: ${backupPath}`);
+		} catch (error) {
+			console.error("Failed to create backup:", error);
+		}
 	}
 }
 
