@@ -268,54 +268,125 @@ export default class BetterFootnotes extends Plugin {
 	) {
 		try {
 			const content = editor.getValue();
-
-			// Find the end of the document to add footnote definition
 			const lines = content.split("\n");
-			let insertLine = lines.length;
 
-			// Check if there are already footnote definitions at the end
-			// If so, add before them, otherwise add at the very end
-			let hasFootnoteSection = false;
+			// Find where footnotes start and where main content ends
+			let footnoteStartLine = -1;
+			let lastContentLine = lines.length - 1;
+
+			// Find the first footnote definition from the bottom
 			for (let i = lines.length - 1; i >= 0; i--) {
 				const line = lines[i].trim();
-				if (line === "") continue; // Skip empty lines
-
 				if (line.match(/^\[\^[^\]]+\]:/)) {
-					// Found a footnote definition
-					hasFootnoteSection = true;
-					continue;
-				} else {
-					// Found non-footnote content
-					if (hasFootnoteSection) {
-						// Insert before the footnote section
-						insertLine = i + 1;
-					}
+					footnoteStartLine = i;
+				} else if (line !== "" && footnoteStartLine === -1) {
+					// Found non-empty, non-footnote content
+					lastContentLine = i;
+					break;
+				} else if (line !== "" && footnoteStartLine !== -1) {
+					// Found content before footnotes
+					lastContentLine = i;
 					break;
 				}
 			}
 
-			// Add footnote definition
-			const footnoteDefinition = `[^${footnoteNumber}]: ${footnoteText}`;
-
-			// Position cursor at the end of document or before existing footnotes
-			const insertPosition = { line: insertLine, ch: 0 };
-
-			// Add some spacing if needed
-			let textToInsert = footnoteDefinition;
-			if (insertLine < lines.length && lines[insertLine].trim() !== "") {
-				textToInsert = "\n" + textToInsert;
+			// Collect all existing footnote definitions
+			const existingFootnotes: Array<{
+				line: number;
+				number: number;
+				text: string;
+			}> = [];
+			if (footnoteStartLine !== -1) {
+				for (let i = footnoteStartLine; i < lines.length; i++) {
+					const line = lines[i];
+					const match = line.match(/^\s*\[\^(\d+)\]:\s*(.*)$/);
+					if (match) {
+						existingFootnotes.push({
+							line: i,
+							number: parseInt(match[1]),
+							text: match[2],
+						});
+					}
+				}
 			}
-			if (insertLine === lines.length) {
-				textToInsert = "\n\n" + textToInsert;
+
+			// Add the new footnote to the collection
+			existingFootnotes.push({
+				line: -1, // New footnote
+				number: footnoteNumber,
+				text: footnoteText,
+			});
+
+			// Sort footnotes by number
+			existingFootnotes.sort((a, b) => a.number - b.number);
+
+			// Determine insertion point and spacing
+			let insertLine: number;
+			let spacingPrefix: string;
+
+			if (footnoteStartLine !== -1) {
+				// There are existing footnotes - replace the entire footnote section
+				insertLine = footnoteStartLine;
+
+				// Check spacing before existing footnotes
+				let emptyLinesBefore = 0;
+				for (let i = footnoteStartLine - 1; i >= 0; i--) {
+					if (lines[i].trim() === "") {
+						emptyLinesBefore++;
+					} else {
+						break;
+					}
+				}
+
+				// Ensure at least one empty line, preserve existing if more
+				spacingPrefix = emptyLinesBefore === 0 ? "\n" : "";
+			} else {
+				// No existing footnotes - add at the end
+				insertLine = lines.length;
+
+				// Check how many empty lines are at the end
+				let emptyLinesAtEnd = 0;
+				for (let i = lines.length - 1; i >= 0; i--) {
+					if (lines[i].trim() === "") {
+						emptyLinesAtEnd++;
+					} else {
+						break;
+					}
+				}
+
+				// Ensure at least one empty line between content and footnotes
+				if (emptyLinesAtEnd === 0) {
+					spacingPrefix = "\n\n";
+				} else if (emptyLinesAtEnd === 1) {
+					spacingPrefix = "\n";
+				} else {
+					spacingPrefix = "";
+				}
 			}
 
-			editor.replaceRange(textToInsert, insertPosition);
+			// Build the footnote section
+			const footnoteLines = existingFootnotes.map(
+				(fn) => `[^${fn.number}]: ${fn.text}`
+			);
+			const footnoteSection = spacingPrefix + footnoteLines.join("\n");
+
+			// Calculate what to replace
+			if (footnoteStartLine !== -1) {
+				// Replace existing footnote section
+				const startPos = { line: footnoteStartLine, ch: 0 };
+				const endPos = { line: lines.length, ch: 0 };
+				editor.replaceRange(footnoteSection, startPos, endPos);
+			} else {
+				// Add new footnote section at the end
+				const insertPos = { line: insertLine, ch: 0 };
+				editor.replaceRange(footnoteSection, insertPos);
+			}
 
 			// Renumber all footnotes to ensure sequential ordering
 			await this.renumberFootnotes(editor);
 
 			console.log(
-				`Added footnote definition ${footnoteNumber}: ${footnoteText}`
+				`Added footnote definition ${footnoteNumber}: ${footnoteText} and sorted all footnotes`
 			);
 		} catch (error) {
 			console.error("Failed to add footnote definition:", error);
