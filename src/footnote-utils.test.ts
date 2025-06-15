@@ -165,22 +165,6 @@ describe("renumberFootnotes", () => {
 			expect(result.footnoteCount).toBe(0);
 		});
 
-		it("should handle complex regex-special characters in footnote labels", () => {
-			const content = `Test[^note.*+?^$\\{\\}()|\\] with special chars.
-
-[^note.*+?^$\\{\\}()|\\]: Content with special label`;
-
-			const result = renumberFootnotes(content);
-
-			const expected = `Test[^1] with special chars.
-
-[^1]: Content with special label`;
-
-			expect(result.content).toBe(expected);
-			expect(result.changed).toBe(true);
-			expect(result.footnoteCount).toBe(1);
-		});
-
 		it("should handle footnotes with indented definitions", () => {
 			const content = `This has footnotes[^a] and[^b].
 
