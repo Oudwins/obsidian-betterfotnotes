@@ -1,7 +1,7 @@
 {
 	"name": "better-footnotes",
-	"version": "0.0.1",
-	"description": "Better footnotes for Obsidian (https://obsidian.md)",
+	"version": "1.0.0",
+	"description": "Enhanced footnote workflow for Obsidian with auto-numbering, custom prompts, and intelligent sorting",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
@@ -10,8 +10,16 @@
 		"test:watch": "vitest",
 		"version": "node version-bump.mjs && git add manifest.json versions.json"
 	},
-	"keywords": [],
-	"author": "",
+	"keywords": [
+		"obsidian",
+		"plugin",
+		"footnotes",
+		"markdown",
+		"writing",
+		"references",
+		"auto-numbering"
+	],
+	"author": "Oudwins",
 	"license": "MIT",
 	"devDependencies": {
 		"@types/node": "^16.11.6",
