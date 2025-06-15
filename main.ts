@@ -239,6 +239,9 @@ export default class BetterFootnotes extends Plugin {
 		footnoteText: string
 	) {
 		try {
+			// Store the original content to calculate cursor adjustment after renumbering
+			const originalContent = editor.getValue();
+
 			// Insert footnote reference at the original cursor position
 			const footnoteRef = `[^${footnoteNumber}]`;
 			editor.replaceRange(footnoteRef, cursor);
@@ -249,6 +252,40 @@ export default class BetterFootnotes extends Plugin {
 				footnoteNumber,
 				footnoteText
 			);
+
+			// After renumbering, find where our footnote reference ended up
+			// and position cursor right after it
+			const newContent = editor.getValue();
+			const lines = newContent.split("\n");
+
+			// Find the line where we inserted the footnote
+			if (cursor.line < lines.length) {
+				const lineContent = lines[cursor.line];
+
+				// Find the footnote reference in this line starting from the original cursor position
+				const beforeCursor = lineContent.substring(0, cursor.ch);
+				const afterCursor = lineContent.substring(cursor.ch);
+
+				// Look for the first footnote reference after the cursor position
+				const footnoteMatch = afterCursor.match(/\[\^\d+\]/);
+				if (footnoteMatch) {
+					const newCursorPos = {
+						line: cursor.line,
+						ch:
+							cursor.ch +
+							footnoteMatch.index +
+							footnoteMatch[0].length,
+					};
+					editor.setCursor(newCursorPos);
+				} else {
+					// Fallback: position cursor after the original position plus reference length
+					const newCursorPos = {
+						line: cursor.line,
+						ch: cursor.ch + footnoteRef.length,
+					};
+					editor.setCursor(newCursorPos);
+				}
+			}
 
 			console.log(
 				`Inserted footnote reference and definition ${footnoteNumber}: ${footnoteText}`
